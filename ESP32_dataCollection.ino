@@ -1,67 +1,103 @@
 // UNFINISHED CODE!!
 
-#include <Wire.h> // framework library
-#include <Adafruit_MCP9601.h> // amplifier library
-#include <Adafruit_MPRLS.h> // pressure sensor library
+  #include <Wire.h> // framework library
+  #include <Adafruit_MCP9601.h> // amplifier library
+  #include <Adafruit_MPRLS.h> // pressure sensor library
 
-#define PCA9548_ADDR 0x70 // define multiplexer
+  #define PCA9548_ADDR 0x70 // define multiplexer
+  #define SerialPort Serial // serial connection
 
-// function to cycle and initialize temp readings
-void tempSelect(uint8_t channel) {
-  if (channel > 7) return;
-  Wire.beginTransmission(PCA9548_ADDR);
-  Wire.write(1 << channel);
-  Wire.endTransmission();
-}
 
-Adafruit_MCP9601 tc; // temperature amplifier object
-Adafruit_MPRLS press(1500.0, -1500.0); // pressure sensor object
+  Adafruit_MCP9601 tc[8]; // thermocouple object
+  Adafruit_MPRLS press; // pressure sensor object
 
-unsigned long lastSample = 0;
-const unsigned long sampleInterval = 100; // 10 Hz
+  unsigned long lastSample = 0; // placeholder time value
+  const unsigned long sampleInterval = 100; // 10 Hz
+
+  // bool control = false; // set to 1 to run code with temp control
+  // const int pelt_pin = 1; // define which pin the peltier is connected to
+  // const int heat_pin = 2; // define which pin the heater is connected to
+
+  // const int setpoint_low = 0; // low stable temperature (deg C)
+  // const int setpoint_hi = 35; // high stable temperature (deg C)
+  // const int hist = 2; // hysterisis value (deg C)
+
+  // function to cycle and initialize temp readings
+  void tempSelect(uint8_t channel) {
+    if (channel > 7) return;
+    Wire.beginTransmission(PCA9548_ADDR);
+    Wire.write(1 << channel);
+    Wire.endTransmission();
+  }
 
 void setup() {
 
-  Serial.begin(115200);
-  Wire.begin(21, 22);   // ESP32 SDA, SCL
+  Wire.begin();
+  Serial.begin(115200); // baud rate
 
-  pcaSelect(0);
-  delay(10);
-
-  if (!tc.begin(0x60)) {
-    Serial.println("MCP9601 not found!");
-    while (1);
+  while (!Serial) {
+    delay(10);
   }
-  // characteristics
-  tc.setADCresolution(MCP9601_ADCRESOLUTION_18);
-  tc.setThermocoupleType(MCP9601_TYPE_K);
-  tc.setFilterCoefficient(3);
-  tc.enable(true);
+
+  // pinMode(pelt_pin, OUTPUT); 
+  // pinMode(heat_pin, OUTPUT);
+
+  for (int i = 0; i < 8; i++) {
+    
+    if (!tc[i].begin(0x67)) {
+      Serial.print("MCP9601 not found on Channel ");
+      Serial.println(i); }
+    tc[i].setADCresolution(MCP9600_ADCRESOLUTION_18);
+    tc[i].setThermocoupleType(MCP9600_TYPE_K);
+    tc[i].setFilterCoefficient(3);
+    tc[i].enable(true); }
+
 
   if (!press.begin()) {
-    Serial.println("Pressure Sensor not found!");
-    while (1);
-  }
+    Serial.println("Pressure Sensor not found!");}
 
-  Serial.println("timestamp_ms,Pressure, T1,T2,T3,T4,T5,T6,T7,T8,Peltier");
+  Serial.println("timestamp_ms,Pressure,T1,T2,T3,T4,T5,T6,T7,T8,Peltier");
   Serial.println("Ready.");
 }
 
 void loop() {
 
+  Serial.println("Program Initialized!");
+
   unsigned long timestamp = millis();
 
   if (timestamp - lastSample >= sampleInterval) {
     lastSample = timestamp;
+  }
 
-    float temps[8];
+    float temps[8]; // to hold temp values
 
     // get temp data from thermocouples
     for (uint8_t i = 0; i < 8; i++) {
-      pcaSelect(i);
-      delay(3);  // allow mux to settle
-      temps[i] = tc.readThermocouple();
+      tempSelect(i);
+      delay(10);  // allow mux to settle
+      temps[i] = tc[i].readThermocouple();
+      delay(1000); // remove when ready to test fully
     }
+
+    // if (control == true) {
+
+    //   if (temps[7] > setpoint_hi + hist) {
+    //       digitalWrite(pelt_pin, HIGH); // turns on peltier cell
+    //   }
+
+    //   if (temps[7] < setpoint_hi - hist) {
+    //       digitalWrite(pelt_pin, LOW); // turns off peltier cell
+    //   }
+
+    //   if (temps[7] < setpoint_low + hist) {
+    //       digitalWrite(heat_pin, HIGH); // turns on heater
+    //   }
+
+    //   if (temps[7] > setpoint_low - hist) {
+    //     digitalWrite(heat_pin, LOW); // turns off heater
+    //   }
+    // }
 
     // read pressure data
     float pressure = press.readPressure();
@@ -71,16 +107,14 @@ void loop() {
     Serial.print(timestamp); // time (s)
     Serial.print(",");
     Serial.print(pressure, 3); // pressure (Pa)
+    Serial.print(",");
 
     for (int i = 0; i < 7; i++) {
       Serial.print(temps[i], 3);
       Serial.print(","); }
 
     // for last temp, a new line starts after
-    for int i = 7; i < 8; i++) {
+    for (int i = 7; i < 8; i++) {
       Serial.println(temps[i], 3);}
 
     }
-
-  }
-}
